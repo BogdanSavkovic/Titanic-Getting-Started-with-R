@@ -1,0 +1,480 @@
+# loading data.sets // test/train
+train <- read.csv("train.csv", header = TRUE)
+test <- read.csv("test.csv", header =  TRUE)
+# data.set Test is missing one variable so it can't be combined with train set
+# adding "survived" column to test set
+# new data.frame <- new column = "survived" + the old test set w/o survived column
+test.survived <- data.frame(Survived = rep("None", nrow(test)), test[,])
+# combined  data.set
+names(test.survived)
+names(train)
+train <- train[,c(2,1,3:12)]
+names(train)
+
+data.combined <- rbind(train, test.survived)
+
+str(data.combined)
+
+data.combined$Survived <- as.factor(data.combined$Survived)
+data.combined$Pclass <- as.factor(data.combined$Pclass)
+
+str(data.combined)
+
+table(data.combined$Survived)
+prop.table(table(data.combined$Survived))
+
+table(data.combined$Pclass)
+install.packages("ggplot2")
+library(ggplot2)
+
+
+str(train)
+train$Pclass <- as.factor(train$Pclass)
+
+ggplot(train, aes(x = Pclass, fill = factor(Survived)))+geom_bar() + xlab("Pclass") +
+  ylab("Total Count") +
+  labs(fill = "Survived")
+
+names(data.combined)
+head(data.combined$Name)
+
+length(unique(as.character(data.combined$Name)))
+
+str(data.combined)
+# we obviously have some duplicated names that need a cloaser look.
+# should determine if those are true or bad data.
+dup.names <- as.character(data.combined[which(duplicated(as.character(data.combined$Name))),"Name"])
+dup.names
+
+data.combined[which(data.combined$Name %in% dup.names),]
+
+# find records for all Misses on board.
+library(stringr)
+misses <- data.combined[which(str_detect(data.combined$Name, "Miss")),]
+misses[1:5,]
+
+extractTitle <- function(name) {
+  name <- as.character(name)
+  
+  if(str_detect(name, "Miss.")){return("Miss.")}
+  else if(str_detect(name, "Mrs.")){return("Mrs.")}
+  else if(str_detect(name, "Mr.")){return("Mr.")}
+  else if(str_detect(name, "Master.")){return("Master.")}
+  else {return("Other.")}
+}
+
+titles <- NULL
+for(i in 1:nrow(data.combined)) {
+  titles <- c(titles, extractTitle(data.combined[i,"Name"]))
+}
+
+titles <- as.factor(titles)
+data.combined$titles <- titles
+
+ggplot(data.combined[1:891,], aes(x = titles, fill = Survived))+geom_bar()+
+  xlab("Titles")+
+  ylab("Total Count")+
+  labs(fill = "Survived")+
+  ggtitle("PClass")+
+  facet_wrap(~Pclass)
+
+str(data.combined) 
+  
+ggplot(data = data.combined[1:891,], aes(x = Sex, fill = Survived))+
+  geom_bar()+
+  xlab("Sex")+
+  ylab("Total Count")+
+  labs("Sex vs Survived")+
+  facet_wrap(~Pclass)
+
+
+summary(data.combined$Age)
+
+mean.withOut.Na <- mean(data.combined$Age, na.rm = TRUE)
+mean.withOut.Na
+pp <- data.combined$Age
+head(pp)
+pp[is.na(pp)] <- mean.withOut.Na
+
+ggplot(data = data.combined[1:891,], aes(x = Age, fill = Survived))+
+  geom_histogram()+
+  xlab("Age")+
+  ylab("Total Count")+
+  labs("Sex vs Survived")+
+  facet_wrap(~Pclass+Sex)
+
+# let's move on to the ticket var
+str(data.combined$Ticket)
+# 929 lvls ? nah, bad for business
+data.combined$Ticket <- as.character(data.combined$Ticket)
+data.combined$Ticket[1:20]
+
+prvi.karakter <- ifelse(data.combined$Ticket == ""," ", substr(data.combined$Ticket, 1, 1))
+prvi.karakter[1:20]
+unique(prvi.karakter)
+
+prvi.karakter <- as.factor(prvi.karakter)
+
+prvi.karakter
+
+ggplot(data.combined[1:891,], aes(x = prvi.karakter[1:891], fill = Survived))+
+  geom_bar()+
+  xlab("Prvi karaketer na karti")+
+  ylab("Total Count")+
+  labs(fill = "Preziveli")+
+  facet_wrap(~Pclass+titles)
+
+summary(data.combined$Fare)  
+str(data.combined$Fare)
+
+ggplot(data.combined[1:891,], aes(x = Fare, fill = Survived))+
+  geom_histogram()+
+  xlab("Fare")+
+  labs("Survived")
+
+# Feature Engineering - making family size variable so we could see its prediction power
+data.combined$Family.Size <- as.factor(data.combined$Parch + data.combined$SibSp +1)
+# Another way
+data.sibsp <- c(train$SibSp, test$SibSp)
+data.parch <- c(train$Parch, test$Parch)
+
+data.combined$Family.Size <- as.factor(data.sibsp + data.parch + 1)
+
+ggplot(data.combined[1:891,], aes(x = Family.Size, fill = Survived))+
+  geom_bar()+
+  xlab("Family size")+
+  ylab("Total Count")+
+  labs(fill = "Survived")+
+  facet_wrap(~Pclass+titles)
+
+# Family size could potentially have some prediction power
+
+#MODELING
+
+library(randomForest)
+
+?randomForest
+
+rf.train.1 <- data.combined[1:891, c("Pclass", "titles")]
+rf.label <- as.factor(train$Survived)
+
+
+#model
+set.seed(1234)
+rf1 <- randomForest(rf.train.1, rf.label, importance = TRUE, ntree = 1000)
+rf1
+varImpPlot(rf1)
+
+rf.train.2 <- data.combined[1:891, c("Pclass","titles", "SibSp")]
+set.seed(1234)
+rf2 <- randomForest(rf.train.2, rf.label, importance = TRUE, ntree = 1000)
+rf2
+varImpPlot(rf2)
+
+rf.train.3 <- data.combined[1:891, c("Pclass","titles", "Parch")]
+set.seed(1234)
+rf3 <- randomForest(rf.train.3, rf.label, importance = TRUE, ntree = 1000)
+rf3
+varImpPlot(rf3)
+
+rf.train.4 <- data.combined[1:891, c("Pclass","titles", "SibSp", "Parch")]
+set.seed(1234)
+rf4 <- randomForest(rf.train.4, rf.label, importance = TRUE, ntree = 1000)
+rf4
+varImpPlot(rf4)
+
+rf.train.5 <- data.combined[1:891, c("Pclass","titles", "Family.Size")]
+set.seed(1234)
+rf5 <- randomForest(rf.train.5, rf.label, importance = TRUE, ntree = 1000)
+rf5
+varImpPlot(rf5)
+
+
+test.submit.df <- data.combined[892:1309, c("Pclass","titles","Family.Size")]
+# Making predictions
+rf.5.pred <- predict(rf5, test.submit.df)
+head(rf.5.pred)
+table(rf.5.pred)
+
+submit.df <- data.frame(PassengerId = rep(892:1309),Survived =  rf.5.pred)
+write.csv(submit.df, file = "RF_SUB_20180227_1.csv" , row.names = FALSE)
+
+#CROSS-VALIDATION
+library(caret)
+# podela podataka na delove - uzimanje indeksa
+set.seed(2345)
+cv.10.folds <- createMultiFolds(rf.label, k = 10, times = 10)
+# definisemo nacin treniranja i prosledjujemo indekse *particije*
+ctrl.1 <- trainControl(method = "repeatedcv", number = 10, repeats = 10, index = cv.10.folds)
+# trening na datim particijama
+set.seed(3456)
+rf.5.cv.1 <- train(rf.train.5, rf.label, method = "rf",ntree = 1000,tuneLength = 3, trControl = ctrl.1)
+rf.5.cv.1
+
+set.seed(1234)
+cv.5.folds <- createMultiFolds(rf.label, k = 5, times = 10)
+ctrl.2 <- trainControl(method = "repeatedcv", number = 5, repeats = 10, index = cv.5.folds)
+set.seed(2346)
+rf.5.cv.2 <- train(rf.train.5, rf.label,method = "rf", ntree = 1000, trControl = ctrl.2)
+rf.5.cv.2
+
+set.seed(1345)
+cv.3.folds <- createMultiFolds(rf.label, k = 3, times = 10)
+ctrl.3 <- trainControl(method = "repeatedcv", number = 3, repeats = 10, index = cv.3.folds)
+set.seed(2456)
+rf.5.cv.3 <- train(rf.train.5, rf.label, method ="rf", ntree = 1000,tuneLength =3, trControl = ctrl.3)
+rf.5.cv.3
+
+# Decision Trees
+library(rpart)
+library(rpart.plot)
+
+#k-Folds validation
+# use cv.3.folds
+# training data:
+rpart.train.1 <- data.combined[1:891, c("Pclass","titles","Family.Size")]
+# 3-folds validation for decision tree -> use ctrl.3 couse it gave the best CV result
+set.seed(94622)
+rpart.1.cv.1 <- train(rpart.train.1, rf.label, method = "rpart", trControl = ctrl.3,
+                      tuneLength = 30)
+rpart.1.cv.1
+
+prp(rpart.1.cv.1$finalModel, type = 0, extra = 1, under = T)
+
+######## 
+# Feature engineering
+table(data.combined$titles)
+
+# Izdvojiti titulu radi dalje analize 
+
+library(stringr)
+# format: prezime,"razmak" titula."razmak" ime
+# podeli na "," - prvi element je prezime, drugi titula+ime sa razmacima
+name.splits <- str_split(data.combined$Name, ",")
+name.splits[1]
+
+last.names <- sapply(name.splits, "[", 1)
+last.names[1:20]
+
+data.combined$last.name <- last.names
+# samo deo posle zareza
+pom.1 <- sapply(name.splits, "[", 2)
+pom.1[1:5]
+# format: "razmak" titula. "razmak" ime
+name.splits.2 <- str_split(pom.1, " ")
+name.splits.2[1]
+
+titles <- sapply(name.splits.2, "[", 2)
+titles[1]
+titles[1:10]
+# drugi nacin
+podeljeno.na.razmak <- str_split(data.combined$Name, " ")
+podeljeno.na.razmak[1]
+titule <- sapply(str_split(data.combined$Name, " "), "[", 2)
+titule[2]
+#treci nacin
+data.combined$Name[1]
+titule.2 <- sapply(str_split(sapply(str_split(data.combined$Name, ","),"[", 2)," "), "[", 2)
+titule.2[1:10]
+
+(unique(titles))
+
+data.combined[which(titles == "the"),]
+
+titles[titles %in% c("Dona.", "the","Lady")] <- "Lady."
+titles[titles %in% c("Ms.", "Mlle.","Miss")] <- "Miss."
+titles[titles %in% "Mme."] <- "Mrs."
+titles[titles %in% c("Jonkheer.", "Don.")] <- "Sir."
+titles[titles %in% c("Col.", "Capt.", "Major.")] <- "Officer"
+table(titles)
+
+data.combined$new.title <- as.factor(titles)
+
+# Visualization of the new.title var
+
+ggplot(data.combined[1:891,], aes(x = new.title, fill = Survived))+
+  geom_bar()+
+  xlab("new Title")+
+  ylab("Total Count")+
+  labs(fill = "Survived")+
+  facet_wrap(~Pclass)
+
+# to avoid overfitting, we could combine data. Sir,Dr,Rev and officer goes to Mr. bucket,
+#Lady goes to Mrs.
+
+data.combined$new.title[which(data.combined$new.title == "Lady.")] <- "Mrs."
+data.combined$new.title[data.combined$new.title %in% c("Rev.", "Sir.","Officer", "Dr.")] <- "Mr."
+
+unique(data.combined$new.title)
+
+ggplot(data.combined[1:891,], aes(x = new.title, fill = Survived))+
+  geom_bar()+
+  ggtitle("PClass")+
+  facet_wrap(~Pclass)
+
+#Cross validation with new var. Instead of titles, use new.title
+# use the same trainControl -> 3folds val that we made in previus training
+rpart.train.2 <- data.combined[1:891,c("Pclass","new.title", "Family.Size")]
+
+set.seed(94622)
+rpart.2.cv.1 <- train(rpart.train.2, rf.label, method ="rpart", tuneLength = 30, trControl = ctrl.3)
+rpart.2.cv.1
+rpart.2.cv.1$finalModel
+prp(rpart.2.cv.1$finalModel, type= 0, under = T, extra = 1)
+
+plot(rpart.2.cv.1)
+
+# first class, Mr. data.frame
+first.mr.df <- data.combined[which(data.combined$new.title == "Mr." & 
+                                     data.combined$Pclass == 1),]
+summary(first.mr.df)
+
+first.mr.df[first.mr.df$Sex == "female",]
+index <- which(data.combined$Sex == "female" & data.combined$new.title == "Mr.")
+index
+
+data.combined$new.title[index] <- "Mrs."
+
+#Are there any other split-ups?
+length(which(data.combined$Sex == "female" &( data.combined$new.title == "Master." | data.combined$new.title == "Mr.")))
+#Refresh first.mr.df
+indexes.first.mr <- which(data.combined$new.title == "Mr." & data.combined$Pclass == 1)
+first.mr.df <- data.combined[indexes.first.mr, ]
+
+summary(first.mr.df)
+
+# let's look at surviving rate of first class "Mr."
+
+summary(first.mr.df[first.mr.df$Survived ==1,])
+View(first.mr.df[first.mr.df$Survived ==1,], "Preziveli, prva klasa, muskarci")
+# exemine fares
+indexes <- which(data.combined$Ticket == "PC 17755" |
+                   data.combined$Ticket == "PC 17611" |
+                   data.combined$Ticket == "113760")
+View(data.combined[indexes,])
+
+ggplot(first.mr.df, aes(x = Fare, fill = Survived)) +
+  geom_density(alpha = 0.5)
+# drugi nacin, manje citljiv
+ggplot(first.mr.df, aes(x = Fare, fill = Survived)) + geom_histogram()
+
+# average fare for every ticket number, by person
+ticket.party.size <- rep(0, nrow(data.combined))
+avg.fare <- rep(0.0, nrow(data.combined))
+
+ticket <- unique(data.combined$Ticket)
+
+for(i in 1:length(ticket)) {
+  current.ticket <- ticket[i]
+  party.indexes <- which(data.combined$Ticket == current.ticket)
+  current.avg.fare <- data.combined[party.indexes[1],"Fare"]/length(party.indexes)
+  
+  for(k in 1:length(party.indexes)) {
+    ticket.party.size[party.indexes[k]] <- length(party.indexes)
+    avg.fare[party.indexes[k]] <- current.avg.fare
+  }
+}
+
+data.combined$ticket.party.size <- ticket.party.size
+data.combined$avg.fare <- avg.fare
+
+first.mr.df <- data.combined[indexes.first.mr,]
+summary(first.mr.df)
+
+# vizualizacija novih kolona
+ggplot(first.mr.df[first.mr.df$Survived != "None",], aes(x = ticket.party.size, fill = Survived))+
+  geom_density(alpha = 0.5)
+# na slici se mogu videti "kontrasti"(disproporcije). vecina putnika cija je t.p.s vrednost 3 - nije prezivela
+# oni sa t.p.s su vecinom preziveli dok su putnici sa t.p.s = 5+ pocrkali
+ggplot(first.mr.df[first.mr.df$Survived != "None",],aes(x = avg.fare, fill = Survived))+
+  geom_density(alpha = 0.5)
+# velika vecina muskaraca iz prve klase koji su preziveli, imaju kartu u vrednosti od 25 -35
+# sto u vecini slucajeva odgovara osobama koje same putuju,
+# sto moze ukazati na visoku korelaciju cene karte i broja putnika sa istim brojem karte
+
+summary(data.combined$avg.fare)
+# 1 NA vrednost
+data.combined[which(is.na(data.combined$Fare)),]
+
+pom.2 <- mean(data.combined[which(data.combined$Family.Size == 1 &
+                                    data.combined$Pclass == 3 &
+                                    data.combined$new.title == "Mr." &
+                                    data.combined$Ticket != "3701"),"avg.fare"])
+pom.2
+
+# drugi nacin
+indexes <- which(data.combined$Family.Size == 1 &
+                   data.combined$Pclass == 3 &
+                   data.combined$new.title == "Mr." &
+                   data.combined$Ticket != "3701")
+similar.na.passengers <- data.combined[indexes,]
+summary(similar.na.passengers$avg.fare)
+# treci nacin
+summary(data.combined$avg.fare[which(data.combined$Family.Size == 1 &
+                              data.combined$Pclass == 3 &
+                              data.combined$new.title == "Mr." &
+                              data.combined$Ticket != "3701")])
+data.combined[which(is.na(avg.fare)),"avg.fare"] <- 7.840
+library(caret)
+?preProcess
+
+preProces.data.combined <- data.combined[,c("ticket.party.size","avg.fare")]
+preProc <- preProcess(preProces.data.combined, method = c("center","scale"))
+post.preProces.data.combined <- predict(preProc, preProces.data.combined)
+
+# provera korelacije t.p.s i avg
+cor(post.preProces.data.combined$ticket.party.size, post.preProces.data.combined$avg.fare)
+# koef. korelacije[-1,1], 1 --> u potpunoj korelaciji, -1 --> u negativnoj korelaciji, 0 -->
+# nisu u korelaciji
+# kako je cor vrednost 0.094, ove dve varijable nisu u korelaciji, sto i nije lose jer imamo
+# dve nove vrednosti sa potencijalnom moci predvidjanja
+index <- which(data.combined$Pclass == 1)
+cor(post.preProces.data.combined$ticket.party.size[index],post.preProces.data.combined$avg.fare[index])
+# jasno je da se korelacija povecala kada smo podatke ogranicili na one iz prve klase ali
+# ova vrednost jos uvek nije dovoljno velika da ne bi iskoristili obe varijable za model
+
+rpart.train.3 <- data.combined[1:891,c("Pclass","new.title","Family.Size","ticket.party.size","avg.fare")]
+rpart.label <- as.factor(train$Survived)
+
+set.seed(94622)
+cv.3.folds.nova <- createMultiFolds(rpart.label, k = 3, times = 10)
+ctrl.3.nova <- trainControl(method = "repeatedcv", number = 3, repeats = 10, index = cv.3.folds.nova)
+set.seed(94622)
+rpart.3.cv.1 <- train(rpart.train.3, rpart.label, method = "rpart", trControl = ctrl.3.nova,
+                      tuneLength = 30)
+rpart.3.cv.1
+prp(rpart.3.cv.1$finalModel, type = 0, extra = 1, under = T)
+
+
+#######
+# Making prediction for submition
+#######
+
+test.submit.df.2 <- data.combined[892:1309,c("Pclass","new.title","Family.Size","ticket.party.size","avg.fare")]
+# making pred:
+rpart.3.pred <- predict(rpart.3.cv.1$finalModel, test.submit.df.2, type = "class")
+rpart.3.pred
+table(rpart.3.pred)
+
+# formating df, by kaggle expectations
+submit.df.3 <- data.frame(PassengerID = rep(892:1309), Survived = rpart.3.pred)
+
+write.csv(submit.df.3, file = "RPART_SUB_20180313_1.csv", row.names = FALSE)
+
+# randomForest with features from rpart.3.cv.1$finalModel
+
+rf.train.6 <- data.combined[1:891, c("Pclass","new.title","ticket.party.size", "avg.fare")]
+# label is the same as in all previous models
+# rf.label <- data.combined[1:891,"Survived"]
+library(randomForest)
+set.seed(1234)
+rf.6 <- randomForest(rf.train.6, rf.label, ntree = 1000, importance = T)
+rf.6
+
+test.submit.df.3 <- data.combined[892:1309,c("Pclass","new.title",
+                                             "ticket.party.size", "avg.fare")]
+rf.6.pred <- predict(rf.6,test.submit.df.3)
+table(rf.6.pred)
+
+submit.df.4 <- data.frame(PassengerID = rep(892:1309), Survived = rf.6.pred)
+write.csv(submit.df.4, file = "RPART_SUB_20180313_2.csv", row.names = F)
